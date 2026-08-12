@@ -10,6 +10,7 @@ password = os.getenv("DUMMYJSON_PASSWORD")
 
 # ---- AUTHENTICATION
 
+
 login_url = "https://dummyjson.com/auth/login"
 
 login_data = {
@@ -27,8 +28,57 @@ access_token = data["accessToken"]
 
 print("Authentication successful")
 
-# ---- AUTHENTICATION REQUEST
+
+# ---- AUTHENTICATED REQUEST
+
 
 headers = {
     "Authorization": f"Bearer {access_token}"
 }
+
+
+# ---- PAGINATION
+
+
+url = "https://dummyjson.com/auth/products"
+
+limit = 10
+skip = 0
+
+
+while True:
+
+    params = {
+        "limit": limit,
+        "skip": skip
+    }
+
+    response = requests.get(
+        url,
+        headers=headers,
+        params=params
+    )
+
+    response.raise_for_status()
+
+    data = response.json()
+
+    products = data["products"]
+
+    if not products:
+        break
+
+    for product in products:
+        print(
+            product["id"],
+            product["title"],
+            product["price"]
+        )
+
+    # ---- NEXT PAGE
+  
+    skip += limit
+
+    # ---- RATE LIMIT
+
+    time.sleep(1)
