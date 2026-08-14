@@ -5,12 +5,11 @@ class SchemaManager:
 
     def __init__(self):
 
-        # Copy the starting schema
         self.schema = PRODUCT_SCHEMA.copy()
 
 
     # ======================================
-    # GET KNOWN FIELDS
+    # KNOWN FIELDS
     # ======================================
 
     def get_known_fields(self):
@@ -21,7 +20,7 @@ class SchemaManager:
 
 
     # ======================================
-    # FIND NEW FIELDS
+    # NEW FIELDS
     # ======================================
 
     def detect_new_fields(
@@ -41,7 +40,7 @@ class SchemaManager:
 
 
     # ======================================
-    # FIND MISSING FIELDS
+    # MISSING FIELDS
     # ======================================
 
     def detect_missing_fields(
@@ -61,7 +60,7 @@ class SchemaManager:
 
 
     # ======================================
-    # ADD NEW FIELD TO SCHEMA
+    # ADD NEW FIELD
     # ======================================
 
     def add_new_field(
@@ -83,7 +82,7 @@ class SchemaManager:
 
 
     # ======================================
-    # DETECT DATA TYPE
+    # DETECT TYPE
     # ======================================
 
     @staticmethod

@@ -5,7 +5,7 @@ from api_client import APIClient
 from extractor import extract_products
 from schema_manager import SchemaManager
 from normalizer import normalize_product
-
+from sql_data_push import SQLManager
 
 def main():
 
@@ -28,10 +28,12 @@ def main():
 
 
     # ======================================
-    # SCHEMA MANAGER
+    # MANAGERS
     # ======================================
 
     schema_manager = SchemaManager()
+
+    sql_manager = SQLManager()
 
 
     # ======================================
@@ -52,15 +54,16 @@ def main():
     print("Extracting data...")
 
 
-    for products in extract_products(client):
+    for products in extract_products(
+        client
+    ):
+
+        normalized_rows = []
 
 
         # ==================================
         # PROCESS PRODUCTS
         # ==================================
-
-        normalized_rows = []
-
 
         for product in products:
 
@@ -68,7 +71,7 @@ def main():
 
 
             # ------------------------------
-            # CHECK NEW FIELDS
+            # NEW FIELDS
             # ------------------------------
 
             detected_new = (
@@ -89,7 +92,7 @@ def main():
 
 
             # ------------------------------
-            # CHECK MISSING FIELDS
+            # MISSING FIELDS
             # ------------------------------
 
             detected_missing = (
@@ -122,7 +125,7 @@ def main():
 
 
         # ==================================
-        # CREATE DATAFRAME
+        # DATAFRAME
         # ==================================
 
         df = pd.DataFrame(
@@ -131,34 +134,57 @@ def main():
 
 
         # ==================================
-        # SQL WILL GO HERE LATER
+        # SQL SERVER
         # ==================================
 
-        # df.to_sql(...)
+        table_name = "products"
+
+
+        # Create table if necessary
+
+        sql_manager.create_table(
+            df,
+            table_name
+        )
+
+
+        # Add new API fields
+
+        sql_manager.add_new_columns(
+            df,
+            table_name
+        )
+
+
+        # Insert new / update existing
+
+        sql_manager.upsert_data(
+            df,
+            table_name
+        )
 
 
         # Release batch memory
+
         del normalized_rows
 
         del df
 
 
     # ======================================
-    # SHOW SCHEMA CHANGES
+    # REPORT
     # ======================================
 
     print("\nSchema update:")
 
 
-    # --------------------------------------
-    # NEW FIELDS
-    # --------------------------------------
-
     if new_fields:
 
         print("\nNew fields:")
 
-        for field in sorted(new_fields):
+        for field in sorted(
+            new_fields
+        ):
 
             print(f"- {field}")
 
@@ -167,17 +193,17 @@ def main():
         print("\nNew fields: None")
 
 
-    # --------------------------------------
-    # MISSING FIELDS
-    # --------------------------------------
-
     if missing_fields:
 
         print("\nMissing fields:")
 
-        for field in sorted(missing_fields):
+        for field in sorted(
+            missing_fields
+        ):
 
-            print(f"- {field} (KEPT)")
+            print(
+                f"- {field} (KEPT)"
+            )
 
     else:
 
@@ -193,7 +219,12 @@ def main():
     )
 
     print(
-        f"Records processed: {total_records}"
+        f"Records processed: "
+        f"{total_records}"
+    )
+
+    print(
+        "SQL load: SUCCESS"
     )
 
     print(

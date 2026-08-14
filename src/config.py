@@ -1,6 +1,11 @@
 import os
 from dotenv import load_dotenv
 
+
+# ==========================================
+# LOAD ENVIRONMENT VARIABLES
+# ==========================================
+
 load_dotenv()
 
 
@@ -10,23 +15,37 @@ load_dotenv()
 
 BASE_URL = "https://dummyjson.com"
 
-USERNAME = os.getenv("DUMMYJSON_USERNAME")
-PASSWORD = os.getenv("DUMMYJSON_PASSWORD")
+USERNAME = os.getenv(
+    "DUMMYJSON_USERNAME"
+)
+
+PASSWORD = os.getenv(
+    "DUMMYJSON_PASSWORD"
+)
 
 PAGE_SIZE = 10
+
 MAX_RETRIES = 3
+
 REQUEST_TIMEOUT = 30
 
 
 # ==========================================
 # SQL SERVER
+# Windows Authentication
 # ==========================================
 
-SQL_SERVER = os.getenv("SQL_SERVER")
-SQL_DATABASE = os.getenv("SQL_DATABASE")
-SQL_USERNAME = os.getenv("SQL_USERNAME")
-SQL_PASSWORD = os.getenv("SQL_PASSWORD")
-SQL_DRIVER = os.getenv("SQL_DRIVER")
+SQL_SERVER = os.getenv(
+    "SQL_SERVER"
+)
+
+SQL_DATABASE = os.getenv(
+    "SQL_DATABASE"
+)
+
+SQL_DRIVER = os.getenv(
+    "SQL_DRIVER"
+)
 
 
 # ==========================================

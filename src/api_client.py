@@ -68,10 +68,7 @@ class APIClient:
                 )
 
 
-                # --------------------------
                 # RATE LIMIT
-                # --------------------------
-
                 if response.status_code == 429:
 
                     retry_after = response.headers.get(
@@ -88,20 +85,12 @@ class APIClient:
 
                         wait_time = 2 ** attempt
 
-                    print(
-                        f"Rate limited. "
-                        f"Retrying in {wait_time} seconds..."
-                    )
-
                     time.sleep(wait_time)
 
                     continue
 
 
-                # --------------------------
                 # SERVER ERROR
-                # --------------------------
-
                 if response.status_code >= 500:
 
                     wait_time = 2 ** attempt

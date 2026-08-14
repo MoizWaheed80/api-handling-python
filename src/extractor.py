@@ -22,12 +22,10 @@ def extract_products(client):
             []
         )
 
-        # No more records
         if not products:
+
             break
 
-        # Return one page
         yield products
 
-        # Move to next page
         skip += PAGE_SIZE
