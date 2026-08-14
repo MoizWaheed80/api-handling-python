@@ -2,92 +2,179 @@ import pandas as pd
 
 from api_client import APIClient
 from extractor import extract_products
-
-from normalizer import (
-    normalize_product,
-    normalize_dimensions,
-    normalize_reviews
-)
+from schema_manager import SchemaManager
+from normalizer import normalize_product
 
 
 def main():
 
+    # ======================================
+    # CREATE API CLIENT
+    # ======================================
+
     client = APIClient()
 
-    # -----------------------------
-    # AUTHENTICATION
-    # -----------------------------
+
+    # ======================================
+    # AUTHENTICATE
+    # ======================================
+
+    print("Authenticating...")
 
     client.authenticate()
 
-    print("Authentication successful")
+    print("Authentication successful.")
 
-    # -----------------------------
-    # STORAGE FOR NORMALIZED DATA
-    # -----------------------------
 
-    product_rows = []
+    # ======================================
+    # CREATE SCHEMA MANAGER
+    # ======================================
 
-    dimension_rows = []
+    schema_manager = SchemaManager()
 
-    review_rows = []
 
-    # -----------------------------
-    # EXTRACTION + NORMALIZATION
-    # -----------------------------
+    # ======================================
+    # PROCESS API PAGES
+    # ======================================
 
-    for api_product in extract_products(client):
+    batch_number = 0
 
-        # Product
-        product = normalize_product(
-            api_product
+    for products in extract_products(client):
+
+        batch_number += 1
+
+        print(
+            f"\nProcessing batch "
+            f"{batch_number}"
         )
 
-        product_rows.append(product)
 
-        # Dimensions
-        dimensions = normalize_dimensions(
-            api_product
+        normalized_rows = []
+
+
+        # ==================================
+        # PROCESS PRODUCTS
+        # ==================================
+
+        for product in products:
+
+
+            # ------------------------------
+            # CHECK NEW FIELDS
+            # ------------------------------
+
+            new_fields = (
+                schema_manager.detect_new_fields(
+                    product
+                )
+            )
+
+
+            # ------------------------------
+            # ADD NEW FIELDS
+            # ------------------------------
+
+            for field in new_fields:
+
+                schema_manager.add_new_field(
+                    field,
+                    product.get(field)
+                )
+
+
+            # ------------------------------
+            # CHECK MISSING FIELDS
+            # ------------------------------
+
+            missing_fields = (
+                schema_manager.detect_missing_fields(
+                    product
+                )
+            )
+
+
+            if missing_fields:
+
+                print(
+                    "Fields missing from "
+                    "current API record:"
+                )
+
+                print(
+                    missing_fields
+                )
+
+                print(
+                    "Existing schema will "
+                    "NOT be deleted."
+                )
+
+
+            # ------------------------------
+            # NORMALIZE
+            # ------------------------------
+
+            normalized_product = (
+                normalize_product(
+                    product,
+                    schema_manager
+                )
+            )
+
+
+            normalized_rows.append(
+                normalized_product
+            )
+
+
+        # ==================================
+        # CREATE DATAFRAME FOR THIS BATCH
+        # ==================================
+
+        df = pd.DataFrame(
+            normalized_rows
         )
 
-        dimension_rows.append(dimensions)
 
-        # Reviews
-        reviews = normalize_reviews(
-            api_product
+        print("\nNormalized batch:")
+
+        print(df)
+
+
+        # ==================================
+        # LATER:
+        # SEND THIS BATCH TO SQL
+        # ==================================
+
+        # df.to_sql(...)
+
+
+        # ----------------------------------
+        # BATCH MEMORY CAN NOW BE RELEASED
+        # ----------------------------------
+
+        del normalized_rows
+
+        del df
+
+
+    # ======================================
+    # FINAL SCHEMA
+    # ======================================
+
+    print("\nFinal schema:")
+
+    for field, metadata in (
+        schema_manager.schema.items()
+    ):
+
+        print(
+            f"{field} -> "
+            f"{metadata['column']} "
+            f"({metadata['type']})"
         )
-
-        review_rows.extend(reviews)
-
-    # -----------------------------
-    # CREATE TABLE-LIKE DATAFRAMES
-    # -----------------------------
-
-    products_df = pd.DataFrame(
-        product_rows
-    )
-
-    dimensions_df = pd.DataFrame(
-        dimension_rows
-    )
-
-    reviews_df = pd.DataFrame(
-        review_rows
-    )
-
-    # -----------------------------
-    # DISPLAY
-    # -----------------------------
-
-    print("\nPRODUCTS")
-    print(products_df)
-
-    print("\nDIMENSIONS")
-    print(dimensions_df)
-
-    print("\nREVIEWS")
-    print(reviews_df)
 
 
 if __name__ == "__main__":
+
     main()
