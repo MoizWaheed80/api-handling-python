@@ -5,7 +5,7 @@ load_dotenv()
 
 
 # ==========================================
-# API CONFIGURATION
+# API
 # ==========================================
 
 BASE_URL = "https://dummyjson.com"
@@ -13,16 +13,20 @@ BASE_URL = "https://dummyjson.com"
 USERNAME = os.getenv("DUMMYJSON_USERNAME")
 PASSWORD = os.getenv("DUMMYJSON_PASSWORD")
 
-
-# ==========================================
-# EXTRACTION CONFIGURATION
-# ==========================================
-
 PAGE_SIZE = 10
-
 MAX_RETRIES = 3
-
 REQUEST_TIMEOUT = 30
+
+
+# ==========================================
+# SQL SERVER
+# ==========================================
+
+SQL_SERVER = os.getenv("SQL_SERVER")
+SQL_DATABASE = os.getenv("SQL_DATABASE")
+SQL_USERNAME = os.getenv("SQL_USERNAME")
+SQL_PASSWORD = os.getenv("SQL_PASSWORD")
+SQL_DRIVER = os.getenv("SQL_DRIVER")
 
 
 # ==========================================
@@ -30,6 +34,7 @@ REQUEST_TIMEOUT = 30
 # ==========================================
 
 PRODUCT_SCHEMA = {
+
     "id": {
         "column": "product_id",
         "type": "int"

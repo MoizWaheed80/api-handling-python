@@ -79,14 +79,18 @@ class APIClient:
                     )
 
                     if retry_after:
-                        wait_time = int(retry_after)
+
+                        wait_time = int(
+                            retry_after
+                        )
 
                     else:
+
                         wait_time = 2 ** attempt
 
                     print(
                         f"Rate limited. "
-                        f"Waiting {wait_time} seconds..."
+                        f"Retrying in {wait_time} seconds..."
                     )
 
                     time.sleep(wait_time)
@@ -102,13 +106,6 @@ class APIClient:
 
                     wait_time = 2 ** attempt
 
-                    print(
-                        f"Server error "
-                        f"{response.status_code}. "
-                        f"Retrying in "
-                        f"{wait_time} seconds..."
-                    )
-
                     time.sleep(wait_time)
 
                     continue
@@ -119,21 +116,13 @@ class APIClient:
                 return response.json()
 
 
-            except requests.RequestException as error:
+            except requests.RequestException:
 
                 if attempt == MAX_RETRIES - 1:
 
                     raise
 
                 wait_time = 2 ** attempt
-
-                print(
-                    f"Request failed: {error}"
-                )
-
-                print(
-                    f"Retrying in {wait_time} seconds..."
-                )
 
                 time.sleep(wait_time)
 

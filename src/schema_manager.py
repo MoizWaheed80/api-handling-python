@@ -5,11 +5,12 @@ class SchemaManager:
 
     def __init__(self):
 
+        # Copy the starting schema
         self.schema = PRODUCT_SCHEMA.copy()
 
 
     # ======================================
-    # GET CURRENT KNOWN FIELDS
+    # GET KNOWN FIELDS
     # ======================================
 
     def get_known_fields(self):
@@ -20,7 +21,7 @@ class SchemaManager:
 
 
     # ======================================
-    # DETECT NEW FIELDS
+    # FIND NEW FIELDS
     # ======================================
 
     def detect_new_fields(
@@ -36,15 +37,11 @@ class SchemaManager:
             self.get_known_fields()
         )
 
-        new_fields = (
-            api_fields - known_fields
-        )
-
-        return new_fields
+        return api_fields - known_fields
 
 
     # ======================================
-    # DETECT MISSING FIELDS
+    # FIND MISSING FIELDS
     # ======================================
 
     def detect_missing_fields(
@@ -60,15 +57,11 @@ class SchemaManager:
             self.get_known_fields()
         )
 
-        missing_fields = (
-            known_fields - api_fields
-        )
-
-        return missing_fields
+        return known_fields - api_fields
 
 
     # ======================================
-    # ADD NEW FIELD
+    # ADD NEW FIELD TO SCHEMA
     # ======================================
 
     def add_new_field(
@@ -82,24 +75,15 @@ class SchemaManager:
         )
 
         self.schema[field_name] = {
+
             "column": field_name,
+
             "type": detected_type
         }
 
-        print(
-            f"NEW FIELD DETECTED: "
-            f"{field_name}"
-        )
-
-        print(
-            f"Added to schema as "
-            f"{field_name} "
-            f"({detected_type})"
-        )
-
 
     # ======================================
-    # TYPE DETECTION
+    # DETECT DATA TYPE
     # ======================================
 
     @staticmethod

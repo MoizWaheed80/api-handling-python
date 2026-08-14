@@ -12,11 +12,6 @@ def extract_products(client):
             "skip": skip
         }
 
-        print(
-            f"Extracting products "
-            f"skip={skip}"
-        )
-
         data = client.get(
             "/auth/products",
             params=params
@@ -27,27 +22,12 @@ def extract_products(client):
             []
         )
 
-
-        # ----------------------------------
-        # NO MORE DATA
-        # ----------------------------------
-
+        # No more records
         if not products:
-
-            print("Extraction finished.")
-
             break
 
-
-        # ----------------------------------
-        # YIELD ONE PAGE
-        # ----------------------------------
-
+        # Return one page
         yield products
 
-
-        # ----------------------------------
-        # NEXT PAGE
-        # ----------------------------------
-
+        # Move to next page
         skip += PAGE_SIZE
