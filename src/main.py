@@ -1,138 +1,129 @@
-import pandas as pd
 import time
+
+import pandas as pd
 
 from api_client import APIClient
 from extractor import extract_products
-from schema_manager import SchemaManager
 from normalizer import normalize_product
+from schema_manager import SchemaManager
 from sql_data_push import SQLManager
 
 
-def main():
+def main() -> None:
+    """Run the API to SQL Server pipeline."""
 
-    # ======================================
-    # SETUP
-    # ======================================
+    # ==========================================
+    # START
+    # ==========================================
+
+    print("==============================")
+    print("Starting API pipeline")
+    print("==============================\n")
+
+
+    # ==========================================
+    # API AUTHENTICATION
+    # ==========================================
 
     client = APIClient()
 
-    schema_manager = SchemaManager()
+    print("Authentication: ", end="")
 
+    client.authenticate()
+
+    print("SUCCESS")
+
+
+    # ==========================================
+    # MANAGERS
+    # ==========================================
+
+    schema_manager = SchemaManager()
     sql_manager = SQLManager()
 
 
-    # ======================================
-    # AUTHENTICATION
-    # ======================================
-
-    try:
-
-        client.authenticate()
-
-        print("Authentication: SUCCESS")
-
-    except Exception:
-
-        print("Authentication: FAILED")
-
-        return
-
-
-    # ======================================
+    # ==========================================
     # EXTRACTION
-    # ======================================
+    # ==========================================
 
     print("Extracting data...")
 
-    normalized_rows = []
+    all_rows = []
 
     new_fields = set()
-
     missing_fields = set()
 
-    total_records = 0
 
+    for products in extract_products(client):
 
-    try:
+        for product in products:
 
-        for products in extract_products(client):
+            # ----------------------------------
+            # Detect new fields
+            # ----------------------------------
 
-            for product in products:
+            detected_new = (
+                schema_manager.detect_new_fields(
+                    product
+                )
+            )
 
-                total_records += 1
+            for field in detected_new:
 
-
-                # ------------------------------
-                # NEW FIELDS
-                # ------------------------------
-
-                detected_new = (
-                    schema_manager.detect_new_fields(
-                        product
-                    )
+                schema_manager.add_new_field(
+                    field,
+                    product.get(field)
                 )
 
-
-                for field in detected_new:
-
-                    schema_manager.add_new_field(
-                        field,
-                        product.get(field)
-                    )
-
-                    new_fields.add(field)
+                new_fields.add(field)
 
 
-                # ------------------------------
-                # MISSING FIELDS
-                # ------------------------------
+            # ----------------------------------
+            # Detect missing fields
+            # ----------------------------------
 
-                detected_missing = (
-                    schema_manager.detect_missing_fields(
-                        product
-                    )
+            detected_missing = (
+                schema_manager.detect_missing_fields(
+                    product
                 )
+            )
+
+            missing_fields.update(
+                detected_missing
+            )
 
 
-                for field in detected_missing:
+            # ----------------------------------
+            # Normalize
+            # ----------------------------------
 
-                    missing_fields.add(field)
-
-
-                # ------------------------------
-                # NORMALIZE
-                # ------------------------------
-
-                normalized_product = (
-                    normalize_product(
-                        product,
-                        schema_manager
-                    )
+            normalized_product = (
+                normalize_product(
+                    product,
+                    schema_manager
                 )
+            )
+
+            all_rows.append(
+                normalized_product
+            )
 
 
-                normalized_rows.append(
-                    normalized_product
-                )
+    # ==========================================
+    # EXTRACTION RESULT
+    # ==========================================
+
+    total_records = len(all_rows)
+
+    print("Extraction: SUCCESS")
+    print(
+        f"Records extracted: {total_records}"
+    )
 
 
-        print("Extraction: SUCCESS")
-
-        print(
-            f"Records extracted: {total_records}"
-        )
-
-
-    except Exception:
-
-        print("Extraction: FAILED")
-
-        return
-
-
-    # ======================================
-    # SCHEMA STATUS
-    # ======================================
+    # ==========================================
+    # SCHEMA
+    # ==========================================
 
     print("\nSchema:")
 
@@ -145,9 +136,7 @@ def main():
 
         for field in sorted(new_fields):
 
-            print(
-                f"  - {field}"
-            )
+            print(f"  - {field}")
 
     else:
 
@@ -157,156 +146,109 @@ def main():
     if missing_fields:
 
         print(
-            f"Missing fields: {len(missing_fields)} "
-            f"(KEPT)"
+            f"Missing fields: "
+            f"{len(missing_fields)} (KEPT)"
         )
 
         for field in sorted(missing_fields):
 
-            print(
-                f"  - {field}"
-            )
+            print(f"  - {field}")
 
     else:
 
-        print(
-            "Missing fields: None"
-        )
+        print("Missing fields: None")
 
 
-    # ======================================
-    # DATAFRAME
-    # ======================================
+    # ==========================================
+    # CREATE DATAFRAME
+    # ==========================================
 
     df = pd.DataFrame(
-        normalized_rows
+        all_rows
     )
 
 
-    # ======================================
+    # ==========================================
     # SQL SERVER
-    # ======================================
-
-    table_name = "products"
+    # ==========================================
 
     print("\nSQL:")
+    print("Table: products")
 
-    print(
-        f"Table: {table_name}"
-    )
-
-
-    # ======================================
-    # RECREATE TABLE
-    # ======================================
 
     try:
 
+        # Create only if table doesn't exist
         sql_manager.create_table(
             df,
-            table_name
-        )
-
-        print(
-            "Table recreated: SUCCESS"
+            "products"
         )
 
 
-    except Exception:
-
-        print(
-            "Table recreated: FAILED"
+        # Add new columns without
+        # dropping existing columns
+        sql_manager.add_new_columns(
+            df,
+            "products"
         )
 
-        print(
-            "Error: Could not create SQL table."
-        )
 
-        return
-
-
-    # ======================================
-    # INSERT DATA
-    # ======================================
-
-    try:
-
+        # Insert / update all records
         sql_manager.upsert_data(
             df,
-            table_name
+            "products"
         )
 
+
+        print("Data saved: SUCCESS")
         print(
-            "Data inserted: SUCCESS"
-        )
-
-        print(
-            f"Records inserted: {total_records}"
+            f"Records saved: {total_records}"
         )
 
 
-    except Exception:
+    except Exception as error:
 
-        print(
-            "Data inserted: FAILED"
-        )
+        print("Data saved: FAILED")
+        print(f"Error: {error}")
 
-        print(
-            "Error: Could not insert data into SQL Server."
-        )
-
-        return
+        raise
 
 
-    # ======================================
-    # FINAL STATUS
-    # ======================================
+    # ==========================================
+    # COMPLETE
+    # ==========================================
 
     print("\n==============================")
-
-    print(
-        "Pipeline completed: SUCCESS"
-    )
-
+    print("Pipeline completed: SUCCESS")
     print("==============================")
 
 
-# ==========================================
+# ==============================================
 # RUN EVERY 24 HOURS
-# ==========================================
+# ==============================================
 
 if __name__ == "__main__":
 
     while True:
 
-        print(
-            "\n=============================="
-        )
-
-        print(
-            "Starting API pipeline"
-        )
-
-        print(
-            "==============================\n"
-        )
-
-
         try:
 
             main()
 
-        except Exception:
+        except Exception as error:
 
             print(
                 "\nPipeline completed: FAILED"
+            )
+
+            print(
+                f"Error: {error}"
             )
 
 
         print(
             "\nNext refresh in 24 hours..."
         )
-
 
         time.sleep(
             24 * 60 * 60

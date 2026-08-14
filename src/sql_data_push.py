@@ -1,4 +1,6 @@
 import urllib.parse
+import json
+from typing import Any
 
 import pandas as pd
 
@@ -16,13 +18,10 @@ from config import (
 
 
 class SQLManager:
+    """Manage SQL Server table creation, schema changes, and data loading."""
 
-    def __init__(self):
-
-        # ======================================
-        # SQL SERVER CONNECTION
-        # Windows Authentication
-        # ======================================
+    def __init__(self) -> None:
+        """Create the SQL Server database engine."""
 
         connection_string = (
             f"DRIVER={{{SQL_DRIVER}}};"
@@ -37,95 +36,53 @@ class SQLManager:
         )
 
         self.engine = create_engine(
-            f"mssql+pyodbc:///?odbc_connect={params}"
+            "mssql+pyodbc:///"
+            f"?odbc_connect={params}",
+            pool_pre_ping=True
         )
 
 
-    # ======================================
+    # ==================================================
     # CHECK TABLE
-    # ======================================
+    # ==================================================
 
-    def table_exists(self, table_name):
+    def table_exists(
+        self,
+        table_name: str
+    ) -> bool:
+        """Return True when the SQL table already exists."""
 
-        inspector = inspect(
-            self.engine
-        )
+        inspector = inspect(self.engine)
 
         return inspector.has_table(
             table_name
         )
 
 
-    # ======================================
-    # DROP TABLE IF EXISTS
-    # ======================================
-
-    def drop_table_if_exists(
-        self,
-        table_name
-    ):
-
-        try:
-
-            if self.table_exists(
-                table_name
-            ):
-
-                with self.engine.begin() as connection:
-
-                    connection.execute(
-                        text(
-                            f"""
-                            DROP TABLE [{table_name}]
-                            """
-                        )
-                    )
-
-                print(
-                    f"Existing table dropped: {table_name}"
-                )
-
-            else:
-
-                print(
-                    f"Table does not exist: {table_name}"
-                )
-
-
-        except Exception as error:
-
-            print(
-                f"Error dropping table: {error}"
-            )
-
-            raise
-
-
-    # ======================================
+    # ==================================================
     # CREATE TABLE
-    # ======================================
+    # ==================================================
 
     def create_table(
         self,
-        df,
-        table_name
-    ):
+        df: pd.DataFrame,
+        table_name: str
+    ) -> None:
+        """Create the table only when it does not already exist."""
 
-        try:
+        if self.table_exists(table_name):
+            return
 
-            # ==================================
-            # DROP EXISTING TABLE
-            # ==================================
 
-            self.drop_table_if_exists(
-                table_name
+        if df.empty:
+            raise ValueError(
+                "Cannot create SQL table from an empty DataFrame."
             )
 
 
-            # ==================================
-            # CREATE NEW TABLE
-            # ==================================
+        try:
 
+            # Create table structure only.
             df.head(0).to_sql(
                 table_name,
                 self.engine,
@@ -134,10 +91,8 @@ class SQLManager:
             )
 
 
-            # ==================================
-            # PRODUCT ID NOT NULL
-            # ==================================
-
+            # Make product_id NOT NULL and create
+            # the primary key.
             with self.engine.begin() as connection:
 
                 connection.execute(
@@ -148,13 +103,6 @@ class SQLManager:
                         """
                     )
                 )
-
-
-            # ==================================
-            # PRIMARY KEY
-            # ==================================
-
-            with self.engine.begin() as connection:
 
                 connection.execute(
                     text(
@@ -168,27 +116,31 @@ class SQLManager:
 
 
             print(
-                f"SQL table created: {table_name}"
+                "SQL table created: SUCCESS"
             )
 
 
         except Exception as error:
 
             print(
-                f"Error creating table: {error}"
+                "SQL table creation: FAILED"
             )
 
-            raise
+            raise RuntimeError(
+                f"Could not create SQL table "
+                f"'{table_name}': {error}"
+            ) from error
 
 
-    # ======================================
+    # ==================================================
     # GET SQL COLUMNS
-    # ======================================
+    # ==================================================
 
     def get_columns(
         self,
-        table_name
-    ):
+        table_name: str
+    ) -> set[str]:
+        """Return the existing SQL column names."""
 
         inspector = inspect(
             self.engine
@@ -204,154 +156,353 @@ class SQLManager:
         }
 
 
-    # ======================================
+    # ==================================================
+    # DETECT SQL DATA TYPE
+    # ==================================================
+
+    @staticmethod
+    def detect_sql_type(
+        series: pd.Series
+    ) -> str:
+        """Determine an appropriate SQL Server data type."""
+
+        if pd.api.types.is_bool_dtype(series):
+            return "BIT"
+
+
+        if pd.api.types.is_integer_dtype(series):
+            return "INT"
+
+
+        if pd.api.types.is_float_dtype(series):
+            return "FLOAT"
+
+
+        return "NVARCHAR(MAX)"
+
+
+    # ==================================================
     # ADD NEW COLUMNS
-    # ======================================
+    # ==================================================
 
     def add_new_columns(
         self,
-        df,
-        table_name
-    ):
+        df: pd.DataFrame,
+        table_name: str
+    ) -> None:
+        """Add API fields that do not yet exist in SQL Server."""
+
+        sql_columns = self.get_columns(
+            table_name
+        )
+
+        python_columns = set(
+            df.columns
+        )
+
+        new_columns = (
+            python_columns - sql_columns
+        )
+
+
+        if not new_columns:
+            return
+
 
         try:
 
-            sql_columns = self.get_columns(
-                table_name
-            )
+            with self.engine.begin() as connection:
 
-            python_columns = set(
-                df.columns
-            )
+                for column in sorted(new_columns):
 
-            new_columns = (
-                python_columns - sql_columns
-            )
-
-
-            for column in new_columns:
-
-                # ------------------------------
-                # Determine SQL data type
-                # ------------------------------
-
-                if pd.api.types.is_integer_dtype(
-                    df[column]
-                ):
-
-                    sql_type = "INT"
-
-                elif pd.api.types.is_float_dtype(
-                    df[column]
-                ):
-
-                    sql_type = "FLOAT"
-
-                elif pd.api.types.is_bool_dtype(
-                    df[column]
-                ):
-
-                    sql_type = "BIT"
-
-                else:
-
-                    sql_type = "NVARCHAR(MAX)"
-
-
-                # ------------------------------
-                # Add column
-                # ------------------------------
-
-                query = f"""
-                    ALTER TABLE [{table_name}]
-                    ADD [{column}] {sql_type}
-                """
-
-
-                with self.engine.begin() as connection:
+                    sql_type = self.detect_sql_type(
+                        df[column]
+                    )
 
                     connection.execute(
-                        text(query)
+                        text(
+                            f"""
+                            ALTER TABLE [{table_name}]
+                            ADD [{column}] {sql_type}
+                            """
+                        )
                     )
 
 
-                print(
-                    f"SQL column added: {column}"
-                )
+                    print(
+                        f"SQL column added: {column}"
+                    )
 
 
         except Exception as error:
 
             print(
-                f"Error adding SQL columns: {error}"
+                "SQL schema update: FAILED"
             )
 
-            raise
+            raise RuntimeError(
+                f"Could not add new SQL column: "
+                f"{error}"
+            ) from error
 
 
-    # ======================================
-    # INSERT DATA
-    # ======================================
+    # ==================================================
+    # CONVERT PYTHON VALUES FOR SQL
+    # ==================================================
+
+    @staticmethod
+    def prepare_value(
+        value: Any
+    ) -> Any:
+        """Convert Python/Pandas values into SQL-compatible values."""
+
+        # Pandas missing value
+        if pd.isna(value) and not isinstance(
+            value,
+            (dict, list)
+        ):
+            return None
+
+
+        # Dictionary / list
+        if isinstance(
+            value,
+            (dict, list)
+        ):
+
+            return json.dumps(
+                value,
+                ensure_ascii=False
+            )
+
+
+        # Pandas / NumPy scalar
+        if hasattr(value, "item"):
+
+            try:
+                return value.item()
+
+            except (ValueError, AttributeError):
+                pass
+
+
+        return value
+
+
+    # ==================================================
+    # UPSERT DATA
+    # ==================================================
 
     def upsert_data(
         self,
-        df,
-        table_name
-    ):
+        df: pd.DataFrame,
+        table_name: str
+    ) -> None:
+        """
+        Insert new records and update existing records
+        using product_id as the key.
+        """
 
-        try:
+        if df.empty:
 
-            if df.empty:
+            print(
+                "No data to save."
+            )
 
-                print(
-                    "No data to insert."
-                )
-
-                return
+            return
 
 
-            # ==================================
-            # GET SQL COLUMNS
-            # ==================================
+        sql_columns = self.get_columns(
+            table_name
+        )
 
-            sql_columns = self.get_columns(
-                table_name
+
+        # Keep only columns that exist in SQL.
+        df = df[
+            [
+                column
+                for column in df.columns
+                if column in sql_columns
+            ]
+        ]
+
+
+        if "product_id" not in df.columns:
+
+            raise ValueError(
+                "product_id is required for upsert."
             )
 
 
-            # Keep only columns that
-            # exist in SQL
+        inserted = 0
+        updated = 0
 
-            df = df[
-                [
-                    column
-                    for column in df.columns
-                    if column in sql_columns
-                ]
-            ]
+
+        try:
+
+            with self.engine.begin() as connection:
+
+                for _, row in df.iterrows():
+
+                    product_id = self.prepare_value(
+                        row["product_id"]
+                    )
+
+
+                    # ----------------------------------
+                    # CHECK IF PRODUCT EXISTS
+                    # ----------------------------------
+
+                    result = connection.execute(
+                        text(
+                            f"""
+                            SELECT COUNT(*)
+                            FROM [{table_name}]
+                            WHERE [product_id] = :product_id
+                            """
+                        ),
+                        {
+                            "product_id": product_id
+                        }
+                    )
+
+                    exists = (
+                        result.scalar() > 0
+                    )
+
+
+                    # ==================================
+                    # UPDATE EXISTING RECORD
+                    # ==================================
+
+                    if exists:
+
+                        update_columns = [
+                            column
+                            for column in df.columns
+                            if column != "product_id"
+                        ]
+
+
+                        if update_columns:
+
+                            set_clause = ", ".join(
+                                f"[{column}] = :{column}"
+                                for column
+                                in update_columns
+                            )
+
+
+                            values = {
+                                column: self.prepare_value(
+                                    row[column]
+                                )
+                                for column
+                                in update_columns
+                            }
+
+
+                            values[
+                                "product_id"
+                            ] = product_id
+
+
+                            connection.execute(
+                                text(
+                                    f"""
+                                    UPDATE [{table_name}]
+                                    SET {set_clause}
+                                    WHERE [product_id] =
+                                          :product_id
+                                    """
+                                ),
+                                values
+                            )
+
+
+                        updated += 1
+
+
+                    # ==================================
+                    # INSERT NEW RECORD
+                    # ==================================
+
+                    else:
+
+                        columns = list(
+                            df.columns
+                        )
+
+
+                        column_names = ", ".join(
+                            f"[{column}]"
+                            for column
+                            in columns
+                        )
+
+
+                        parameter_names = ", ".join(
+                            f":{column}"
+                            for column
+                            in columns
+                        )
+
+
+                        values = {
+                            column: self.prepare_value(
+                                row[column]
+                            )
+                            for column
+                            in columns
+                        }
+
+
+                        connection.execute(
+                            text(
+                                f"""
+                                INSERT INTO [{table_name}]
+                                ({column_names})
+                                VALUES
+                                ({parameter_names})
+                                """
+                            ),
+                            values
+                        )
+
+
+                        inserted += 1
 
 
             # ==================================
-            # INSERT DATA
+            # SUCCESS
             # ==================================
 
-            df.to_sql(
-                table_name,
-                self.engine,
-                if_exists="append",
-                index=False
+            print(
+                "Data saved: SUCCESS"
+            )
+
+            print(
+                f"Records saved: "
+                f"{inserted + updated}"
             )
 
 
             print(
-                f"SQL data inserted: {len(df)} records"
+                f"  Inserted: {inserted}"
+            )
+
+            print(
+                f"  Updated: {updated}"
             )
 
 
         except Exception as error:
 
             print(
-                f"Error inserting data: {error}"
+                "Data saved: FAILED"
             )
 
-            raise
+            raise RuntimeError(
+                f"Could not save data to SQL Server: "
+                f"{error}"
+            ) from error
