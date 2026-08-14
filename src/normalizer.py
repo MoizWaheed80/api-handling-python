@@ -1,3 +1,6 @@
+import json
+
+
 def normalize_product(
     api_product,
     schema_manager
@@ -15,6 +18,23 @@ def normalize_product(
         value = api_product.get(
             api_field
         )
+
+
+        # ==================================
+        # HANDLE NESTED API DATA
+        # ==================================
+
+        if isinstance(value, (dict, list)):
+
+            value = json.dumps(
+                value,
+                ensure_ascii=False
+            )
+
+
+        # ==================================
+        # ADD TO RESULT
+        # ==================================
 
         result[column_name] = value
 

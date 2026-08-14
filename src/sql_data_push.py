@@ -47,11 +47,58 @@ class SQLManager:
 
     def table_exists(self, table_name):
 
-        inspector = inspect(self.engine)
+        inspector = inspect(
+            self.engine
+        )
 
         return inspector.has_table(
             table_name
         )
+
+
+    # ======================================
+    # DROP TABLE IF EXISTS
+    # ======================================
+
+    def drop_table_if_exists(
+        self,
+        table_name
+    ):
+
+        try:
+
+            if self.table_exists(
+                table_name
+            ):
+
+                with self.engine.begin() as connection:
+
+                    connection.execute(
+                        text(
+                            f"""
+                            DROP TABLE [{table_name}]
+                            """
+                        )
+                    )
+
+                print(
+                    f"Existing table dropped: {table_name}"
+                )
+
+            else:
+
+                print(
+                    f"Table does not exist: {table_name}"
+                )
+
+
+        except Exception as error:
+
+            print(
+                f"Error dropping table: {error}"
+            )
+
+            raise
 
 
     # ======================================
@@ -64,19 +111,49 @@ class SQLManager:
         table_name
     ):
 
-        if not self.table_exists(
-            table_name
-        ):
+        try:
 
-            # Create table structure
+            # ==================================
+            # DROP EXISTING TABLE
+            # ==================================
+
+            self.drop_table_if_exists(
+                table_name
+            )
+
+
+            # ==================================
+            # CREATE NEW TABLE
+            # ==================================
+
             df.head(0).to_sql(
                 table_name,
                 self.engine,
-                if_exists="replace",
+                if_exists="fail",
                 index=False
             )
 
-            # Add primary key
+
+            # ==================================
+            # PRODUCT ID NOT NULL
+            # ==================================
+
+            with self.engine.begin() as connection:
+
+                connection.execute(
+                    text(
+                        f"""
+                        ALTER TABLE [{table_name}]
+                        ALTER COLUMN [product_id] INT NOT NULL
+                        """
+                    )
+                )
+
+
+            # ==================================
+            # PRIMARY KEY
+            # ==================================
+
             with self.engine.begin() as connection:
 
                 connection.execute(
@@ -84,14 +161,24 @@ class SQLManager:
                         f"""
                         ALTER TABLE [{table_name}]
                         ADD CONSTRAINT PK_{table_name}
-                        PRIMARY KEY (product_id)
+                        PRIMARY KEY ([product_id])
                         """
                     )
                 )
 
+
             print(
                 f"SQL table created: {table_name}"
             )
+
+
+        except Exception as error:
+
+            print(
+                f"Error creating table: {error}"
+            )
+
+            raise
 
 
     # ======================================
@@ -127,69 +214,83 @@ class SQLManager:
         table_name
     ):
 
-        sql_columns = self.get_columns(
-            table_name
-        )
+        try:
 
-        python_columns = set(
-            df.columns
-        )
+            sql_columns = self.get_columns(
+                table_name
+            )
 
-        new_columns = (
-            python_columns - sql_columns
-        )
+            python_columns = set(
+                df.columns
+            )
 
-        for column in new_columns:
-
-            # ------------------------------
-            # Determine SQL data type
-            # ------------------------------
-
-            if pd.api.types.is_integer_dtype(
-                df[column]
-            ):
-
-                sql_type = "INT"
-
-            elif pd.api.types.is_float_dtype(
-                df[column]
-            ):
-
-                sql_type = "FLOAT"
-
-            elif pd.api.types.is_bool_dtype(
-                df[column]
-            ):
-
-                sql_type = "BIT"
-
-            else:
-
-                sql_type = "NVARCHAR(MAX)"
-
-
-            # ------------------------------
-            # Add column
-            # ------------------------------
-
-            query = f"""
-                ALTER TABLE [{table_name}]
-                ADD [{column}] {sql_type}
-            """
-
-            with self.engine.begin() as connection:
-
-                connection.execute(
-                    text(query)
-                )
-
-            print(
-                f"SQL column added: {column}"
+            new_columns = (
+                python_columns - sql_columns
             )
 
 
+            for column in new_columns:
+
+                # ------------------------------
+                # Determine SQL data type
+                # ------------------------------
+
+                if pd.api.types.is_integer_dtype(
+                    df[column]
+                ):
+
+                    sql_type = "INT"
+
+                elif pd.api.types.is_float_dtype(
+                    df[column]
+                ):
+
+                    sql_type = "FLOAT"
+
+                elif pd.api.types.is_bool_dtype(
+                    df[column]
+                ):
+
+                    sql_type = "BIT"
+
+                else:
+
+                    sql_type = "NVARCHAR(MAX)"
+
+
+                # ------------------------------
+                # Add column
+                # ------------------------------
+
+                query = f"""
+                    ALTER TABLE [{table_name}]
+                    ADD [{column}] {sql_type}
+                """
+
+
+                with self.engine.begin() as connection:
+
+                    connection.execute(
+                        text(query)
+                    )
+
+
+                print(
+                    f"SQL column added: {column}"
+                )
+
+
+        except Exception as error:
+
+            print(
+                f"Error adding SQL columns: {error}"
+            )
+
+            raise
+
+
     # ======================================
-    # UPSERT DATA
+    # INSERT DATA
     # ======================================
 
     def upsert_data(
@@ -198,154 +299,59 @@ class SQLManager:
         table_name
     ):
 
-        if df.empty:
+        try:
 
-            return
+            if df.empty:
 
+                print(
+                    "No data to insert."
+                )
 
-        # ==================================
-        # GET SQL COLUMNS
-        # ==================================
-
-        sql_columns = self.get_columns(
-            table_name
-        )
+                return
 
 
-        # Keep only columns that
-        # currently exist in SQL
+            # ==================================
+            # GET SQL COLUMNS
+            # ==================================
 
-        df = df[
-            [
-                column
-                for column in df.columns
-                if column in sql_columns
-            ]
-        ]
+            sql_columns = self.get_columns(
+                table_name
+            )
 
 
-        # ==================================
-        # PROCESS EACH PRODUCT
-        # ==================================
+            # Keep only columns that
+            # exist in SQL
 
-        with self.engine.begin() as connection:
-
-            for _, row in df.iterrows():
-
-                product_id = row[
-                    "product_id"
+            df = df[
+                [
+                    column
+                    for column in df.columns
+                    if column in sql_columns
                 ]
+            ]
 
 
-                # --------------------------
-                # CHECK PRODUCT
-                # --------------------------
+            # ==================================
+            # INSERT DATA
+            # ==================================
 
-                result = connection.execute(
-                    text(
-                        f"""
-                        SELECT COUNT(*)
-                        FROM [{table_name}]
-                        WHERE product_id = :product_id
-                        """
-                    ),
-                    {
-                        "product_id": product_id
-                    }
-                )
-
-                exists = (
-                    result.scalar() > 0
-                )
+            df.to_sql(
+                table_name,
+                self.engine,
+                if_exists="append",
+                index=False
+            )
 
 
-                # ==========================
-                # UPDATE EXISTING PRODUCT
-                # ==========================
-
-                if exists:
-
-                    update_columns = [
-                        column
-                        for column in df.columns
-                        if column != "product_id"
-                    ]
+            print(
+                f"SQL data inserted: {len(df)} records"
+            )
 
 
-                    if update_columns:
+        except Exception as error:
 
-                        set_clause = ", ".join(
-                            [
-                                f"[{column}] = :{column}"
-                                for column
-                                in update_columns
-                            ]
-                        )
+            print(
+                f"Error inserting data: {error}"
+            )
 
-
-                        query = f"""
-                            UPDATE [{table_name}]
-                            SET {set_clause}
-                            WHERE product_id = :product_id
-                        """
-
-
-                        values = {
-                            column: row[column]
-                            for column
-                            in update_columns
-                        }
-
-
-                        values[
-                            "product_id"
-                        ] = product_id
-
-
-                        connection.execute(
-                            text(query),
-                            values
-                        )
-
-
-                # ==========================
-                # INSERT NEW PRODUCT
-                # ==========================
-
-                else:
-
-                    columns = list(
-                        df.columns
-                    )
-
-
-                    column_names = ", ".join(
-                        f"[{column}]"
-                        for column in columns
-                    )
-
-
-                    parameter_names = ", ".join(
-                        f":{column}"
-                        for column in columns
-                    )
-
-
-                    query = f"""
-                        INSERT INTO [{table_name}]
-                        ({column_names})
-                        VALUES
-                        ({parameter_names})
-                    """
-
-
-                    values = {
-                        column: row[column]
-                        for column in columns
-                    }
-
-
-                    connection.execute(
-                        text(query),
-                        values
-                    )
+            raise
